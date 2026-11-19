@@ -86,3 +86,12 @@ GTAGS
 
 # Generated source files
 smd_rpc_sym.c
+
+# KernelSU CI work directories (see .github/kernel-ci)
+out/
+toolchains/
+
+# Python bytecode caches must not be committed.
+__pycache__/
+*.pyc
+!.github
