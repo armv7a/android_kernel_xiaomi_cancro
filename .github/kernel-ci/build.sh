@@ -41,7 +41,10 @@ git -C "$KSU" clean -qfd
 python3 "$CI/patch_ksu.py" "$KSU"
 python3 "$CI/prepare.py" "$ROOT" "$KSU"
 
-make_args=(-C "$ROOT" O="$OUT" ARCH=arm CROSS_COMPILE="$CROSS_COMPILE")
+# 3.4.113 predates the stricter section-mismatch check; the modern host
+# binutils flags 13 legacy mismatches that the upstream toolchain ignored.
+# Keep modpost from turning them into a hard link error.
+make_args=(-C "$ROOT" O="$OUT" ARCH=arm CROSS_COMPILE="$CROSS_COMPILE" CONFIG_NO_ERROR_ON_MISMATCH=y)
 [[ -f "$OUT/.config" ]] || make "${make_args[@]}" "$DEFCONFIG"
 python3 "$CI/prepare.py" "$ROOT" "$KSU" "$OUT/.config"
 if [[ "$DEBUG" == --no-ksu ]]; then
