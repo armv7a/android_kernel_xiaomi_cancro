@@ -1,0 +1,70 @@
+name: Cancro KernelSU
+
+on:
+  schedule:
+    - cron: '17 0 * * *' # 每日 00:17 UTC，每 24 小时检测一次 KernelSU commit
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: cancro-kernelsu-build
+  cancel-in-progress: false
+
+jobs:
+  detect:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    outputs:
+      sha: ${{ steps.check.outputs.sha }}
+      changed: ${{ steps.check.outputs.changed }}
+      artifact_name: ${{ steps.check.outputs.artifact_name }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/kernel-ci/ci.py detect
+
+  build:
+    needs: detect
+    if: needs.detect.outputs.changed == 'true'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    env:
+      KSU_SHA: ${{ needs.detect.outputs.sha }}
+      JOBS: '2'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc make libc6-dev binutils-arm-linux-gnueabi libmpc3 libgmp10 zlib1g bc xz-utils zip unzip python3
+      - name: Run CI tests
+        run: python3 -m unittest discover -s .github/kernel-ci/tests -v
+      - name: Build pinned KernelSU kernel
+        run: bash .github/kernel-ci/build.sh "$KSU_SHA"
+      - name: Package and verify AnyKernel3
+        run: bash .github/kernel-ci/package.sh "$KSU_SHA"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ needs.detect.outputs.artifact_name }}
+          path: out/dist/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
+      - name: Preserve build logs on failure
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: build-logs
+          path: out/build/logs/
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 14
